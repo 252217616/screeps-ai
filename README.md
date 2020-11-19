@@ -1,2 +1,6 @@
 # screeps-ai
-screeps Game script
+
+
+适用于游戏《[Screeps](https://screeps.com/a/#!/map)》的半自动 ai 项目。
+
+注意，本项目尚未完成，后续可能会进行大范围的代码更改，你可以通过本项目了解 Screeps 相关的操作,但是请尊重自己和他人的游戏体验，不要将本项目直接部署在官方服务器上。
