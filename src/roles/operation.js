@@ -10,49 +10,39 @@ const roles = {
         //准备阶段
         /** @param {Creep} creep **/
         prepare:creep=>{
-            //规定了 x y 坐标的 准备阶段前往位置。
-            if(creep.memory.x && creep.memory.y && creep.pos.x != creep.memory.x && creep.pos.y!= creep.memory.y){
-                creep.goTo(RoomPosition.constructor(creep.memory.x,creep.memory.y,creep.room.name) , {reusePath: 20, ignoreCreeps: true});
-                return false;
+            //准备阶段前往 能量源
+            if(creep.memory.sourceId){
+                let source = game.getObjectById(creep.memory.sourceId);
+                creep.goTo(source);
+                if(creep.isNearTo(source)){
+                    return true;
+                }
             }else{
                 return true;
             }
         },
         // 因为 prepare 准备完之后会先执行 source 阶段，所以在这个阶段里对 container 进行维护
         source: creep => {
-            creep.say('🚧')
-            // 没有能量就进行采集，因为是维护阶段，所以允许采集一下工作一下
-            if (creep.store[RESOURCE_ENERGY] <= 0) {
-                creep.getEngryFrom(Game.getObjectById(data.sourceId))
-                return false
-            }
-            
-            // 获取 prepare 阶段中保存的 dropId 
-            if(creep.memory.dropId){
-                // 存在 container，把血量修满
-                let target = Game.getObjectById<(creep.memory.dropId)
-                if (target && target instanceof StructureContainer) {
-                    creep.repair(target)
-                    // 血修满了就正式进入采集阶段
-                    return target.hits >= target.hitsMax
-                }
-            }
-
-            // 存在 container，把血量修满
-            if (target && target instanceof StructureContainer) {
-                creep.repair(target)
-                // 血修满了就正式进入采集阶段
-                return target.hits >= target.hitsMax
-            }
-                // 还没找到，等下个 tick 会重新新建工地
-                return false
+            return true
         },
         // 采集阶段会无脑采集，过量的能量会掉在 container 上然后被接住存起来
         target: creep => {
-            creep.getEngryFrom(Game.getObjectById(creep.memory.sourceId))
-            // 快死了就把身上的能量丢出去，这样就会存到下面的 container 里，否则变成墓碑后能量无法被 container 自动回收
-            if (creep.ticksToLive < 2) creep.drop(RESOURCE_ENERGY)
+            let result = creep.getEngryFrom(Game.getObjectById(creep.memory.sourceId))
+            if(result == OK){
+                let drop = Game.getObjectById(creep.memory.dropId);
+                creep.transfer(drop,RESOURCE_ENERGY);
+            }
             return false
+        },
+        //快死时做的事情
+        destroy:creep =>{
+            if(creep.ticksToLive<=3){
+                let drop = Game.getObjectById(creep.memory.dropId);
+                creep.transfer(drop,RESOURCE_ENERGY);
+                return false;
+            }
+            return true;
+
         },
         bodys: 'harvester'
     },
@@ -63,6 +53,7 @@ const roles = {
      */
     upgrader:  {
         prepare:creep=>{
+            
            return true;
         },
         source: creep => {
@@ -75,19 +66,21 @@ const roles = {
             if (source && source.structureType === STRUCTURE_CONTAINER && source.store[RESOURCE_ENERGY] <= 500) return false
 
             // 获取能量
-            const result = creep.getEngryFrom(source)
-            // 但如果是 Container 或者 Link 里获取能量的话，就不会重新运行规划
-            // if (
-            //     (result === ERR_NOT_ENOUGH_RESOURCES || result === ERR_INVALID_TARGET) &&
-            //     (source instanceof StructureTerminal || source instanceof StructureStorage)
-            // ) {
-            //     // 如果发现能量来源（建筑）里没有能量了，就自杀并重新运行 upgrader 发布规划
-            //     creep.room.releaseCreep('upgrader')
-            //     creep.suicide()
-            // }
+             creep.getEngryFrom(source)
+            
         },
         target: creep => {
             if (creep.upgrade() === ERR_NOT_ENOUGH_RESOURCES) return true
+        },
+        //快死时做的事情
+        destroy:creep =>{
+            if(creep.ticksToLive<=3){
+                const source =  Game.getObjectById(creep.memory.sourceId)
+                creep.transfer(source,RESOURCE_ENERGY);
+                return false;
+            }
+            return true;
+            
         },
         bodys: 'upgrader'
     },
@@ -98,45 +91,41 @@ const roles = {
     miner:{
         // 检查矿床里是不是还有矿
         isNeed: room => {
-            // 房间中的矿床是否还有剩余产量
-            if (room.mineral.mineralAmount <= 0) {
-                room.memory.mineralCooldown = Game.time + MINERAL_REGEN_TIME
-                return false
-            }
-
-            // 再检查下终端存储是否已经太多了, 如果太多了就休眠一段时间再出来看看
-            if (!room.terminal || room.terminal.store.getUsedCapacity() >= minerHervesteLimit) {
-                room.memory.mineralCooldown = Game.time + 10000
-                return false
-            }
-            
-            return true
+            return true;
         },
         prepare: creep => {
-            creep.goTo(creep.room.mineral.pos)
-
-            // 如果移动到了就准备完成并保存移动时间
-            if (creep.pos.isNearTo(creep.room.mineral.pos)) {
-                creep.memory.travelTime = CREEP_LIFE_TIME - creep.ticksToLive
-                return true
+           //准备阶段前往 能量源
+           if(creep.memory.sourceId){
+            let source = game.getObjectById(creep.memory.sourceId);
+            creep.goTo(source);
+            if(creep.isNearTo(source)){
+                return true;
             }
-
-            return false
+        }else{
+            return true;
+        }
         },
         source: creep => {
-            if (creep.ticksToLive <= creep.memory.travelTime + 30) return true
-            else if (creep.store.getFreeCapacity() === 0) return true
-
-            // 采矿
-            const harvestResult = creep.harvest(creep.room.mineral)
-
-            
-            if (harvestResult === ERR_NOT_IN_RANGE) creep.goTo(creep.room.mineral.pos)
+            creep.getEngryFrom(Game.getObjectById(creep.memory.sourceId))
+            let drop = Game.getObjectById(creep.memory.dropId);
+            creep.transfer(drop,creep.memory.sourceType);
+          
+            return false
         },
         target: creep => {
             if(creep.memory.dropId){
-                creep.transfer(Game.getObjectById(creep.memory.dropId),creep.memory,sourceType);
+                creep.transfer(Game.getObjectById(creep.memory.dropId),creep.memory.sourceType);
             }
+        },
+         //快死时做的事情
+         destroy:creep =>{
+             if(creep.ticksToLive<=3){
+                let drop = Game.getObjectById(creep.memory.dropId);
+                creep.transfer(drop,creep.memory.sourceType);
+                return false;
+             }
+             return true;
+            
         },
         bodys: 'worker'
     },
@@ -149,12 +138,7 @@ const roles = {
      * @param sourceId 要挖的矿 id
      */
     builder: {
-        // 工地都建完就就使命完成
-        isNeed: room => {
-            const targets = room.find(FIND_MY_CONSTRUCTION_SITES)
-            return targets.length > 0 ? true : false
-        },
-        // 把 data 里的 sourceId 挪到外边方便修改
+        // 前往工地
         prepare: creep => {
             
             return true
@@ -178,7 +162,105 @@ const roles = {
 
             if (creep.store.getUsedCapacity() === 0) return true
         },
+        destroy:creep =>{
+            //把能量放回
+            if(creep.ticksToLive<=30){
+                if(creep.transfer(creep.room.storage,RESOURCE_ENERGY) === ERR_NOT_IN_RANGE){
+                    creep.goTo(creep.room.storage.pos)
+                }
+                return false;
+            }
+            return true;
+           
+       },
         bodys: 'worker'
     },
+    /**
+     * 运输者
+     */
+    porter: {
+        // 接受任务
+        prepare: creep => {
+            let tasks = global.taskListMap[creep.room.name];    
+            if(!creep.memory.tasking && tasks.length!=0){
+                //找到任务最近的
+                let min = {
+                    index :0,
+                    distance:100
+                };
+                for(let i = 0;i<tasks.length;i++){
+                    let taskInfo = tasks[i];
+                    let distance = Math.abs(creep.pos.x-taskInfo.x)+Math.abs(creep.pos.y-taskInfo.y);
+                    if(distance == 1){
+                        min.index = i;
+                        break;
+                    }else{
+                        min = min.distance>distance?{index:i,distance:distance}:min;
+                    }
+                }
+                let taskInfo = tasks[min.index];
+                tasks.splice(min.index,1);
+                creep.memory.tasking = true;
+                creep.memory.task_id = taskInfo.id;
+                creep.memory.task_withdrawId = taskInfo.withdrawId;
+                creep.memory.task_transferId = taskInfo.transferId;
+                creep.memory.task_sourceType = taskInfo.sourceType;
+            }
+            return true
+        },
+        // 根据 sourceId 对应的能量来源里的剩余能量来自动选择新的能量来源
+        source: creep => {
+            if(creep.memory.tasking){
+                let target = Game.getObjectById(creep.memory.task_withdrawId);
+                let result = creep.withdraw(target,creep.memory.task_sourceType);
+                if(result === ERR_NOT_IN_RANGE){ //从目标拿取能量
+                    creep.goTo(target.pos);  
+                }
+                if(result === ERR_FULL){
+                    return true;
+                }
+                if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) return true
+            }else{
+                //没任务就放回仓库
+                if(creep.room.storage){
+                    if(creep.transfer(creep.room.storage,RESOURCE_ENERGY) == ERR_NOT_IN_RANGE){ //从目标拿取能量
+                        creep.goTo(creep.room.storage);
+                    }
+                }
+                return false;
+            }
+            
+        },
+        target: creep => {
+            if(creep.memory.tasking){
+                let target = Game.getObjectById(creep.memory.task_transferId);
+                //运输能量
+                if(creep.transfer(target,sourceType) == ERR_NOT_IN_RANGE){ //给能量
+                    creep.goTo(target.pos);
+                    return false;
+                }else{
+                    creep.memory.tasking = false;
+                    global.taskRecord.get(creep.room.name).set(creep.memory.task_id,false);
+                    delete creep.memory.task_withdrawId;
+                    delete creep.memory.task_transferId;
+                    delete creep.memory.task_sourceType;
+                    delete creep.memory.task_id;     
+                    return true;
+                }
+            }
+        },
+        destroy:creep =>{
+            //把能量放回
+            if(creep.ticksToLive<=30 && creep.room.storage){
+                if(creep.transfer(creep.room.storage,RESOURCE_ENERGY) === ERR_NOT_IN_RANGE){
+                    creep.goTo(creep.room.storage.pos)
+                }
+                return false;
+            }
+            return true;
+           
+       },
+        bodys: 'worker'
+    }
 
 }
