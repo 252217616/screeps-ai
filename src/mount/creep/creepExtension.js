@@ -17,14 +17,13 @@ const creepExtension = {
             if (this.ticksToLive === CREEP_LIFE_TIME) this._id = this.id // 解决 this creep not exist 问题
             return
         }
-
-        // 快死时的处理
-        if (this.ticksToLive <= 3) {
-            // 如果还在工作，就释放掉自己的工作位置
-        }
-
         // 获取对应配置项
         const creepConfig = roles[this.memory.role];
+
+        // 快死时的处理
+        if (!creepConfig.destroy(this)) {
+            return;
+        }
 
         // 没准备的时候就执行准备阶段
         if (!this.memory.ready) {
@@ -187,20 +186,6 @@ const creepExtension = {
             return undefined
         }
     },
-
-    // 自定义敌人检测
-    checkEnemy() { 
-        // 代码实现...
-    },
-    // 填充所有 spawn 和 extension
-    fillSpawnEngry() { 
-        // 代码实现...
-    },
-    // 填充所有 tower
-    fillTower() {
-        // 代码实现...
-    },
-    // 其他更多自定义拓展
 }
 
 
