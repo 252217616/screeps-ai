@@ -12,15 +12,46 @@ buildMap.set("energy",[]);
 buildMap.set("tower",[]);
 buildMap.set("link",[]);
 
+import { doing } from './utils'
+
+//房间数据
+global.myRooms = new Map();
 
 module.exports.loop = function () {
 
     //挂载原型
 
+    //准备数据
+    if(!global.initData){
+        global.initData = true;
+        let creeps = Game.creeps;
+        //装载creep角色数量
+        for( let name in creeps){
+            let room = creeps[name].room;
+            let rolenum = room.memory[creeps[name].memory.role];
+            if(rolenum){
+                room.memory[creeps[name].memory.role] = rolenum+1;
+            }else{
+                room.memory[creeps[name].memory.role] = 1;
+            }
+        }
+
+    }
+
     //检查死亡creep
+    for(var name in Memory.creeps) {
+        if(!Game.creeps[name]) {
+            //在creep 数量中减少;
+            let creep = Memory.creeps[name];
+            let roleMap = global.myRooms.get(creep.room.name);
+            roleMap.set(creep.memory.role,roleMap.get(creep.memory.role)-1);
+            delete Memory.creeps[name];
+            // console.log('Clearing non-existing creep memory:', name);
+        }
+    }
 
     //各房间运营
-
+    doing(Game.structures,Game.creeps);
 
     // console.log(global.taskList.length)
     // for(let i in global.taskList){

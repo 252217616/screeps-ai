@@ -240,7 +240,7 @@ const roles = {
                     return false;
                 }else{
                     creep.memory.tasking = false;
-                    global.taskRecord.get(creep.room.name).set(creep.memory.task_id,false);
+                    delete this.room.memory[creep.memory.task_id];
                     delete creep.memory.task_withdrawId;
                     delete creep.memory.task_transferId;
                     delete creep.memory.task_sourceType;
@@ -250,12 +250,25 @@ const roles = {
             }
         },
         destroy:creep =>{
+            //如果有任务，把任务重新放回队列
+           
             //把能量放回
-            if(creep.ticksToLive<=30 && creep.room.storage){
-                if(creep.transfer(creep.room.storage,RESOURCE_ENERGY) === ERR_NOT_IN_RANGE){
-                    creep.goTo(creep.room.storage.pos)
+            if(creep.ticksToLive<=30){
+                if(this.memory.tasking){
+                    his.memory.tasking = false;
+                    global.taskListMap[creep.room.name].push({
+                        id:creep.memory.task_id ,
+                        withdrawId:creep.memory.task_withdrawId,
+                        transferId:creep.memory.task_transferId,
+                        sourceType:creep.memory.task_sourceType
+                    });
                 }
-                return false;
+                if(creep.room.storage){
+                    if(creep.transfer(creep.room.storage,RESOURCE_ENERGY) === ERR_NOT_IN_RANGE){
+                        creep.goTo(creep.room.storage.pos)
+                    }
+                    return false;
+                }      
             }
             return true;
            
@@ -264,3 +277,4 @@ const roles = {
     }
 
 }
+export default roles
