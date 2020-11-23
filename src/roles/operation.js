@@ -31,6 +31,12 @@ const roles = {
             if(result == OK){
                 let drop = Game.getObjectById(creep.memory.dropId);
                 creep.transfer(drop,RESOURCE_ENERGY);
+                if(this.memory.centerLink){
+                    let centerLink = Game.getObjectById(this.memory.centerLink);
+                    if(drop.store.getUsedCapacity()>=700){
+                        drop.transferEnergy(centerLink);
+                    }
+                }
             }
             return false
         },
@@ -43,8 +49,7 @@ const roles = {
             }
             return true;
 
-        },
-        bodys: 'harvester'
+        }
     },
      /**
      * 升级者
@@ -81,8 +86,7 @@ const roles = {
             }
             return true;
             
-        },
-        bodys: 'upgrader'
+        }
     },
      /**
      * 矿工
@@ -126,8 +130,7 @@ const roles = {
              }
              return true;
             
-        },
-        bodys: 'worker'
+        }
     },
         /**
      * 建筑者
@@ -172,8 +175,7 @@ const roles = {
             }
             return true;
            
-       },
-        bodys: 'worker'
+       }
     },
     /**
      * 运输者
@@ -181,7 +183,7 @@ const roles = {
     porter: {
         // 接受任务
         prepare: creep => {
-            let tasks = global.taskListMap[creep.room.name];    
+            let tasks = this.room.memory.taskList;    
             if(!creep.memory.tasking && tasks.length!=0){
                 //找到任务最近的
                 let min = {
@@ -201,10 +203,12 @@ const roles = {
                 let taskInfo = tasks[min.index];
                 tasks.splice(min.index,1);
                 creep.memory.tasking = true;
-                creep.memory.task_id = taskInfo.id;
+                creep.memory.task_id = taskInfo.taskId;
                 creep.memory.task_withdrawId = taskInfo.withdrawId;
                 creep.memory.task_transferId = taskInfo.transferId;
                 creep.memory.task_sourceType = taskInfo.sourceType;
+                creep.memory.task_x = taskInfo.x;
+                creep.memory.task_y = taskInfo.y;
             }
             return true
         },
@@ -245,6 +249,8 @@ const roles = {
                     delete creep.memory.task_transferId;
                     delete creep.memory.task_sourceType;
                     delete creep.memory.task_id;     
+                    delete creep.memory.task_x;  
+                    delete creep.memory.task_y;  
                     return true;
                 }
             }
@@ -254,13 +260,15 @@ const roles = {
            
             //把能量放回
             if(creep.ticksToLive<=30){
-                if(this.memory.tasking){
-                    his.memory.tasking = false;
-                    global.taskListMap[creep.room.name].push({
-                        id:creep.memory.task_id ,
-                        withdrawId:creep.memory.task_withdrawId,
-                        transferId:creep.memory.task_transferId,
-                        sourceType:creep.memory.task_sourceType
+                if(creep.memory.tasking){
+                    creep.memory.tasking = false;
+                    creep.room.memory.taskLits.push({
+                        taskId:creep.memory.task_id,
+                        transferId : creep.memory.task_transferId,
+                        withdrawId : creep.memory.task_withdrawId,
+                        sourceType : creep.memory.task_sourceType,
+                        x : creep.memory.task_x,
+                        y : creep.memory.task_y
                     });
                 }
                 if(creep.room.storage){
@@ -272,9 +280,75 @@ const roles = {
             }
             return true;
            
-       },
-        bodys: 'worker'
-    }
+       }
+    },
+     /**
+     * 仓库管理者
+     */
+    roleStorageManager: {
+        // 前往仓库
+        prepare: creep => {
+            if(creep.room.storage && !creep.pos.isNearTo(creep.room.storage)){
+                creep.goTo(creep.room.storage.pos);
+                return false;
+            }
+            return true;
+        },
+        // 根据 sourceId 对应的能量来源里的剩余能量来自动选择新的能量来源
+        source: creep => {
+            creep.memory.linkFlag = true;
+            if(creep.room.memory.controllerLink){
+                let controllerLink = Game.getObjectById(creep.room.memory.controllerLink);
+                if(controllerLink.store.getFreeCapacity(RESOURCE_ENERGY)<700){
+                    //往contallerLink补充能量
+                    delete creep.memory.linkFlag;
+                }
+            }
+            let source ;
+            //装满自己
+            if(!creep.memory.linkFlag){
+                source = creep.room.storage;
+            }else{
+                source = Game.getObjectById(creep.room.memory.centerLink);
+            }
+            if(creep.withdraw(source, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE){
+                creep.goTo(source.pos);
+            }
+
+            if (creep.store.getFreeCapacity(RESOURCE_ENERGY) === 0) return true
+            // 从仓库获取能量
+            if (creep.getEngryFrom(source) === ERR_FULL ) {
+                return true;
+            }
+        },
+        target: creep => {
+            if(!creep.memory.linkFlag){
+                let centerLink = Game.getObjectById(creep.room.memory.centerLink);
+                if(creep.transfer(centerLink, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
+                    creep.goTo(centerLink.pos);
+                }
+                centerLink.transferEnergy(Game.getObjectById(creep.room.memory.controllerLink));
+
+            }else{
+                let storage = creep.room.storage;
+                if(creep.transfer(storage, RESOURCE_ENERGY) == ERR_NOT_IN_RANGE) {
+                    creep.goTo(storage.pos);
+                }
+            }
+            if (creep.store.getUsedCapacity() === 0) return true
+        },
+        destroy:creep =>{
+            //把能量放回
+            if(creep.ticksToLive<=3){
+                if(creep.transfer(creep.room.storage,RESOURCE_ENERGY) === ERR_NOT_IN_RANGE){
+                    creep.goTo(creep.room.storage.pos)
+                }
+                return false;
+            }
+            return true;
+           
+       }
+    },
 
 }
 export default roles
